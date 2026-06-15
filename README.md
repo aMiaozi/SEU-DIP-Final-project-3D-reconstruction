@@ -1,8 +1,6 @@
-# 高精度三维重建：LightGlue + 3DGS 管线
+# 东南大学数字图像处理课程项目设计 — 三维重建
 
-东南大学数字图像处理课程设计项目。
-
-本项目构建了 **SuperPoint + LightGlue + COLMAP + 3D Gaussian Splatting** 的完整重建管线，从环绕视频抽帧出发，实现高质量的三维辐射场建模。实验在两个数据集上完成：美国灯塔（309 张图像）与东南大学千弓楼（328 张图像）。
+本项目基于 **SuperPoint + LightGlue + COLMAP + 3D Gaussian Splatting** 的完整管线，从视频截取的多视角图像重建三维模型。实验在两个数据集上完成：美国西海岸灯塔（309 张图像）与东南大学千弓楼（328 张图像）。
 
 ## 效果展示
 
@@ -85,8 +83,8 @@ ffmpeg -i your_video.mp4 -vf "fps=328/153" -q:v 2 ../data/images/frame_%04d.jpg
 
 ```bash
 python src/run_LightGlue.py \
-    --image_dir ../data/images/SEU_QiangongBuilding \
-    --output_dir ../models/SEU_QiangongBuilding_328
+    --image_dir ../data/images/LightHouse \
+    --output_dir ../models/LightHouse_309
 ```
 
 参数说明：
@@ -102,9 +100,9 @@ python src/run_LightGlue.py \
 
 ```bash
 colmap image_undistorter \
-    --image_path ../data/images/SEU_QiangongBuilding \
-    --input_path ../models/SEU_QiangongBuilding_328 \
-    --output_path ../models/SEU_QiangongBuilding_328_PINHOLE \
+    --image_path ../data/images/LightHouse  \
+    --input_path ../models/LightHouse_309 \
+    --output_path ../models/LightHouse_309_PINHOLE \
     --output_type COLMAP
 ```
 
@@ -112,7 +110,7 @@ colmap image_undistorter \
 
 ```bash
 python src/train.py \
-    -s ../models/SEU_QiangongBuilding_328_PINHOLE \
+    -s ../models/LightHouse_309_PINHOLE \
     -r 4 \
     --iterations 30000
 ```
