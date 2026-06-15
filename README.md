@@ -58,8 +58,8 @@ ffmpeg -i your_video.mp4 -vf "fps=328/153" -q:v 2 ../data/images/frame_%04d.jpg
 
 ```bash
 python src/run_LightGlue.py \
-    --image_dir ../data/images/SEU_QiangongBuilding \
-    --output_dir ../models/SEU_QiangongBuilding_328
+    --image_dir ../data/images/LightHouse \
+    --output_dir ../models/LightHouse_309
 ```
 
 ### 3. COLMAP 去畸变
