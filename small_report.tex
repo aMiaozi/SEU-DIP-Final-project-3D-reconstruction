@@ -1,0 +1,336 @@
+\documentclass[UTF8,a4paper]{ctexart}
+\usepackage{geometry}
+\geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{booktabs}
+
+\newcommand{\cover}{
+    \begin{titlepage}
+    \centering
+    \vspace*{5cm}
+    {\Huge\bfseries 基于LightGlue特征匹配与增量式SfM的稀疏重建实验报告\par}
+    
+    \vspace{2cm}
+    {\large 数字图像处理课程实验\par}
+    
+
+    \vspace{3cm} 
+    {\Large 姓名：苗珺杰\par}      
+    \vspace{0.5cm} 
+    {\Large 学号：08023218\par} 
+    \vfill
+    
+
+    {\large 2026年6月\par}    
+    \end{titlepage}
+}
+
+\lstset{
+    language=Python,
+    basicstyle=\small\ttfamily,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{gray},
+    stringstyle=\color{orange},
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    tabsize=4,
+    extendedchars=true,
+    escapeinside={(*@}{@*)},
+    literate={__}{\_\_}2
+}
+
+\begin{document}
+
+\cover
+
+\thispagestyle{empty}
+\newpage
+\tableofcontents
+\newpage
+
+\section{选题背景}
+
+\subsection{实验目的}
+
+本实验围绕三维重建管线中的前端特征提取与匹配环节展开。传统三维重建流程（SfM-MVS）中，特征提取与匹配的质量直接决定了后续相机位姿估计的精度与点云完整性。本实验旨在：
+
+\begin{itemize}
+    \item 理解SIFT等传统特征提取方法的局限，掌握SuperPoint深度学习特征检测网络与LightGlue注意力匹配器的基本原理；
+    \item 掌握增量式SfM（Structure from Motion）的数学基础，包括对极几何、三角化与光束法平差；
+    \item 基于hloc框架调用SuperPoint+LightGlue，结合COLMAP完成从图像到稀疏点云与相机位姿的重建流程；
+    \item 对比SIFT基线与SuperPoint+LightGlue的重建效果，分析滑动窗口匹配策略对计算效率与重建质量的影响。
+\end{itemize}
+
+\subsection{应用背景}
+
+三维重建技术通过多视角图像恢复场景的三维几何结构，在文化遗产数字化、建筑测绘与虚拟展示中有广泛应用。以历史灯塔建筑为例，其主体由大面积规则砖石砌成，表面风化不一，砖缝纹理重复；塔顶灯室包含金属栏杆、玻璃透镜等细小构件。这些特征使得传统测绘手段面临困难：全站仪只能获取离散点，接触式测量可能损伤风化表面，且灯塔多位于海岸礁石，设备运输成本高。相比之下，基于多视角图像的非接触式重建方法仅需消费级相机，无需接触目标表面，更适合这类复杂场景的数字化存档。
+
+然而，在SfM流程中，特征提取与匹配是关键瓶颈。传统方法以SIFT为代表，通过高斯差分检测器与梯度方向直方图生成128维描述子。对于灯塔的重复砖墙纹理，SIFT在局部邻域内提取的多个关键点描述子高度相似，导致大量误匹配。当误匹配比例超过RANSAC阈值时，对极几何估计失败，SfM初始化崩溃。此外，金属栏杆与玻璃灯罩等弱纹理或高光区域缺乏足够的梯度响应，特征点稀疏，造成点云空洞。在309张环绕图像的规模下，穷举匹配的时间复杂度为$O(N^2)$，即使使用FLANN近似最近邻，整体匹配时间仍达数小时。因此，需要更鲁棒的特征提取方法与更高效的匹配策略。
+
+\section{算法原理}
+
+\subsection{SuperPoint特征检测网络}
+
+SuperPoint采用编码器—解码器架构，通过共享编码器提取深层语义特征，再由检测解码器与描述子解码器分别输出关键点位置与局部描述子[2]。
+
+设输入图像为$\boldsymbol{I} \in \mathbb{R}^{H \times W \times 3}$，共享编码器将其映射为特征张量$\boldsymbol{F} \in \mathbb{R}^{H_c \times W_c \times C}$，其中$H_c = H/8$，$W_c = W/8$，$C = 256$。检测解码器对$\boldsymbol{F}$施加$1\times1$卷积，输出张量$\boldsymbol{D} \in \mathbb{R}^{H_c \times W_c \times 65}$。前64维对应$8\times8$网格内各像素位置的得分，第65维为dustbin通道，表示该单元格内无特征点。沿通道施加softmax后去除dustbin通道，经像素洗牌上采样至原始分辨率，得到关键点概率热图$\boldsymbol{P} \in [0,1]^{H \times W}$，再通过非极大值抑制与阈值筛选得到关键点集合。
+
+描述子解码器以$\boldsymbol{F}$为输入，经卷积映射得到半稠密描述子图，在关键点处通过双线性插值采样并L2归一化，得到$\{\boldsymbol{d}_i\}_{i=1}^{M}$，$\boldsymbol{d}_i \in \mathbb{R}^{256}$。
+
+SuperPoint的训练采用自监督策略：先在合成几何数据集上预训练MagicPoint检测器，再通过单应性变换适应（Homographic Adaptation）生成真实图像的伪真值标签。描述子训练采用对比损失：
+
+$$\mathcal{L}_{\text{desc}} = \mathbb{E}_{(i,j) \in \mathcal{M}} \left[\|\boldsymbol{d}_i - \boldsymbol{d}_j\|_2\right] + \mathbb{E}_{(i,j) \in \mathcal{N}} \left[\max\left(0, m - \|\boldsymbol{d}_i - \boldsymbol{d}_j\|_2\right)\right],$$
+
+其中$\mathcal{M}$为匹配点对集合，$\mathcal{N}$为非匹配点对集合，$m$为间隔边界。该损失约束匹配点对的描述子距离尽可能小，非匹配点对大于$m$，从而增强判别性。
+
+\subsection{LightGlue特征匹配器}
+
+LightGlue基于Transformer架构，通过迭代自注意力与交叉注意力在跨图像关键点集合间建立对应关系[3]。给定图像$\mathcal{A}$的特征$\{\boldsymbol{f}_i\}_{i=1}^{M}$与图像$\mathcal{B}$的$\{\boldsymbol{f}'_j\}_{j=1}^{N}$，每个特征向量融合位置编码以保留几何布局。
+
+自注意力层在单幅图像内部聚合全局上下文。多头注意力将查询、键、值拆分为$h$个头并行计算：
+
+$$\text{head}_i = \text{Attention}\left(\boldsymbol{Q}\boldsymbol{W}_i^Q, \boldsymbol{K}\boldsymbol{W}_i^K, \boldsymbol{V}\boldsymbol{W}_i^V\right),$$
+
+$$\text{MultiHead}(\boldsymbol{Q},\boldsymbol{K},\boldsymbol{V}) = \text{Concat}\left(\text{head}_1, \dots, \text{head}_h\right)\boldsymbol{W}^O.$$
+
+交叉注意力层以$\mathcal{A}$为查询、$\mathcal{B}$为键与值，建立跨图像对应。对相似度矩阵$\boldsymbol{S} \in \mathbb{R}^{M \times N}$引入dustbin行列构造增广矩阵，经行与列分别softmax归一化后，匹配概率为两个归一化矩阵的逐元素乘积。该双重归一化满足每点至多匹配一次，允许未匹配点通过dustbin吸收。
+
+LightGlue还引入早期退出机制。设第$l$层后各查询点的最大匹配概率为$c_i^{(l)} = \max_j Z_{ij}^{(l)}$，若高置信度点比例超过阈值，则提前终止后续层计算，直接输出结果。这在匹配关系明确的图像对中可降低计算开销。
+
+\subsection{增量式SfM稀疏重建}
+
+增量式SfM从非结构化多视图像中逐步恢复相机位姿与稀疏三维结构[4]。
+
+\textbf{对极几何与相对位姿估计。}给定图像对匹配点对$\{(\boldsymbol{x}_i, \boldsymbol{x}'_i)\}$，利用八点法结合RANSAC估计基础矩阵$\boldsymbol{F}$，满足$\boldsymbol{x}'^{\top}_i \boldsymbol{F} \boldsymbol{x}_i = 0$且$\text{rank}(\boldsymbol{F}) = 2$。已知内参$\boldsymbol{K}$时，本质矩阵$\boldsymbol{E} = \boldsymbol{K}^{\top} \boldsymbol{F} \boldsymbol{K}$，通过SVD分解$\boldsymbol{E} = \boldsymbol{U} \boldsymbol{D} \boldsymbol{V}^{\top}$恢复相对旋转$\boldsymbol{R}$与平移$\boldsymbol{t}$（至尺度），共四组候选解，经三角化与可见性检验筛选唯一正确解。
+
+\textbf{线性三角化。}给定归一化坐标$\boldsymbol{x}_1, \boldsymbol{x}_2$及位姿$(\boldsymbol{R}, \boldsymbol{t})$，由投影射线共面条件$\boldsymbol{x}_2 \times (\boldsymbol{R}\boldsymbol{X} + \boldsymbol{t}) = \boldsymbol{0}$构造线性方程组$\boldsymbol{A}\boldsymbol{X} = \boldsymbol{0}$，对$\boldsymbol{A}$施加SVD，$\boldsymbol{X}$对应最小奇异值的右奇异向量，经齐次化得到三维坐标。
+
+\textbf{图像注册与增量扩展。}SfM从基线足够宽的初始化图像对开始，估计初始位姿并三角化得到初始点云。后续图像通过PnP（Perspective-n-Point）结合RANSAC，利用已重建三维点与二维观测估计相机外参。新图像注册后，通过多视角三角化扩展点云。
+
+\textbf{光束法平差。}每次添加新图像后执行BA，联合优化相机参数与三维点坐标。令相机参数为$\boldsymbol{\xi} = \{\boldsymbol{K}_m, \boldsymbol{R}_m, \boldsymbol{t}_m\}$，三维点为$\boldsymbol{\chi} = \{\boldsymbol{X}_k\}$，优化目标为最小化重投影误差：
+
+$$\min_{\boldsymbol{\xi}, \boldsymbol{\chi}} \sum_{m,k} \rho\left(\|\boldsymbol{x}_{mk} - \pi(\boldsymbol{\xi}_m, \boldsymbol{X}_k)\|^2\right),$$
+
+其中$\rho(\cdot)$为鲁棒核函数。利用舒尔补消去三维点更新量，将求解复杂度从$O((V+P)^3)$降至$O(V^3 + P)$，显著提升大规模BA效率。
+
+\section{算法实现}
+
+\subsection{开发环境与依赖}
+
+本实验使用Python 3.10，核心依赖包括：
+\begin{itemize}
+    \item \texttt{hloc} (Hierarchical-Localization)：封装SuperPoint提取与LightGlue匹配，并提供COLMAP接口；
+    \item \texttt{pycolmap}：COLMAP的Python绑定，用于增量式SfM重建；
+    \item PyTorch 2.2.2（CUDA 12.1）：支撑深度学习推理与GPU加速。
+\end{itemize}
+
+第三方库需在项目同级目录手动克隆安装：
+
+\begin{lstlisting}[language=bash]
+mkdir ../third_party && cd ../third_party
+git clone https://github.com/cvg/Hierarchical-Localization.git
+cd Hierarchical-Localization && pip install -e . && cd ..
+\end{lstlisting}
+
+\subsection{实验核心代码}
+
+本实验基于hloc框架编写重建脚本，核心流程包括SuperPoint特征提取、滑动窗口生成配对、LightGlue匹配与COLMAP增量式SfM。滑动窗口策略将309张图像的配对数从$47,586$削减至约$3,090$。
+
+\begin{lstlisting}[language=Python]
+import argparse
+import os
+import pycolmap
+from pathlib import Path
+from hloc import extract_features, match_features, reconstruction
+import torch
+import gc
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description="SuperPoint + LightGlue 特征提取与 SfM 重建"
+    )
+    parser.add_argument("--image_dir", type=str, required=True)
+    parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--window", type=int, default=10)
+    parser.add_argument("--max_keypoints", type=int, default=2048)
+    parser.add_argument("--resize_max", type=int, default=1200)
+    args = parser.parse_args()
+
+    image_dir = Path(args.image_dir)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    feature_path = output_dir / "features.h5"
+    match_path = output_dir / "matches.h5"
+    sfm_pairs = output_dir / "pairs.txt"
+
+    feature_conf = {
+        'output': 'superpoint',
+        'model': {
+            'name': 'superpoint',
+            'nms_radius': 4,
+            'max_keypoints': args.max_keypoints
+        },
+        'preprocessing': {
+            'grayscale': True,
+            'resize_max': args.resize_max
+        }
+    }
+
+    matcher_conf = {
+        'output': 'lightglue',
+        'model': {
+            'name': 'lightglue',
+            'features': 'superpoint',
+            'flash': False,
+            'mp': True,
+            'depth_confidence': 0.9,
+            'width_confidence': 0.95
+        }
+    }
+
+    # 1. 提取特征
+    extract_features.main(feature_conf, image_dir, feature_path=feature_path)
+    gc.collect(); torch.cuda.empty_cache()
+
+    # 2. 滑动窗口生成配对
+    image_list = sorted([
+        f for f in os.listdir(image_dir)
+        if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+    ])
+    pairs = []
+    for i in range(len(image_list)):
+        for j in range(1, args.window + 1):
+            idx = (i + j) % len(image_list)
+            pairs.append(f"{image_list[i]} {image_list[idx]}")
+    with open(sfm_pairs, "w", encoding="utf-8") as f:
+        f.write("\n".join(pairs))
+
+    # 3. 特征匹配
+    match_features.main(matcher_conf, sfm_pairs, features=feature_path, matches=match_path)
+
+    # 4. 增量式SfM重建
+    model = reconstruction.main(output_dir, image_dir, sfm_pairs, feature_path, match_path)
+    print(f"注册图像: {model.num_reg_images()}, 三维点: {model.num_points3D()}")
+\end{lstlisting}
+
+\subsection{SIFT基线对比代码}
+
+为对比传统方法效果，同时编写了基于SIFT的基线脚本：
+
+\begin{lstlisting}[language=Python]
+import argparse
+import pycolmap
+from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--image_dir", type=str, required=True)
+parser.add_argument("--output_dir", type=str, required=True)
+args = parser.parse_args()
+
+image_dir = Path(args.image_dir)
+output_dir = Path(args.output_dir)
+output_dir.mkdir(parents=True, exist_ok=True)
+
+pycolmap.extract_features(output_dir / "database.db", image_dir)
+pycolmap.match_exhaustive(output_dir / "database.db")
+maps = pycolmap.incremental_mapping(output_dir / "database.db", image_dir, output_dir)
+print(f"SIFT基线: 注册 {maps[0].num_reg_images()} 张, {maps[0].num_points3D()} 点")
+\end{lstlisting}
+
+\section{实验结果与分析}
+
+\subsection{数据集与实验设置}
+
+实验使用美国灯塔环绕视频抽帧得到的309张图像，分辨率约为$1920 \times 1080$。硬件平台为NVIDIA GeForce RTX 4060 Laptop（8 GB VRAM）。
+
+对比三组实验：
+
+\begin{itemize}
+    \item \textbf{SIFT基线}：COLMAP默认SIFT提取器 + 穷举匹配，max_keypoints无限制；
+    \item \textbf{SuperPoint+LightGlue（穷举）}：SuperPoint(max_keypoints=2048) + LightGlue穷举匹配；
+    \item \textbf{SuperPoint+LightGlue（滑动窗口）}：SuperPoint(max_keypoints=2048) + 窗口$w=10$的序列匹配。
+\end{itemize}
+
+\subsection{匹配效率对比}
+
+\begin{table}[H]
+\centering
+\caption{不同策略的匹配对数与重建时间}
+\begin{tabular}{lccc}
+\toprule
+方法 & 匹配对数 & 匹配耗时 & 显存峰值 \\
+\midrule
+SIFT穷举 & 47,586 & 约4小时 & 4 GB \\
+SuperPoint+LightGlue穷举 & 47,586 & 约2.5小时 & 6.8 GB \\
+SuperPoint+LightGlue窗口=10 & 3,090 & 约15分钟 & 4.2 GB \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+滑动窗口策略将匹配对数从47,586削减至3,090（降幅约93.5\%），匹配时间从约2.5小时降至15分钟。这是因为309张环绕图像的相邻帧存在强时间连续性，窗口$w=10$已覆盖足够共视区域。同时，显存峰值从6.8 GB降至4.2 GB，进一步留出了后续处理空间。
+
+\subsection{重建质量对比}
+
+\begin{table}[H]
+\centering
+\caption{不同方法的重建质量指标}
+\begin{tabular}{lcccc}
+\toprule
+方法 & 注册图像数 & 三维点数 & 重投影误差(像素) & 注册率 \\
+\midrule
+SIFT基线 & 287/309 & 42,153 & 2.14 & 92.9\% \\
+SuperPoint+LightGlue穷举 & 309/309 & 78,620 & 1.26 & 100\% \\
+SuperPoint+LightGlue窗口=10 & 309/309 & 75,341 & 1.31 & 100\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{注册率差异}：SIFT基线因重复砖墙导致大量误匹配，RANSAC阶段剔除过多，22张图像无法注册。SuperPoint+LightGlue两组均成功注册全部309张图像，说明深度学习特征在重复纹理与弱纹理区域具有明显优势。
+
+\textbf{重投影误差}：SuperPoint+LightGlue穷举的平均重投影误差为1.26像素，优于SIFT基线的2.14像素。滑动窗口策略下误差略升至1.31像素，差异很小（约0.05像素），说明窗口策略在大幅降低计算量的同时几乎没有牺牲匹配精度。
+
+\textbf{点云密度}：SuperPoint+LightGlue两组生成的三维点约为75,000个，接近SIFT基线的两倍。这是因为SuperPoint在全卷积网络下提取的特征分布更均匀，弱纹理区域（如金属栏杆、玻璃灯罩）也有足够响应；LightGlue的注意力机制则有效区分了重复纹理，减少了错误剔除。
+
+\subsection{滑动窗口参数分析}
+
+窗口大小$w$决定了每帧与前后多少帧建立匹配。$w$过小会导致场景图稀疏，SfM初始化失败或注册率下降；$w$过大则回归穷举，失去计算优势。实验中测试了不同$w$的注册率：
+
+\begin{itemize}
+    \item $w = 5$：注册率98.4\%（5张图像无法注册），场景图过稀疏导致部分区域断裂；
+    \item $w = 10$：注册率100\%，计算量与精度的平衡点；
+    \item $w = 20$：注册率100\%，但匹配对数翻倍至约6,180，耗时增加约80\%。
+\end{itemize}
+
+对于环绕拍摄且帧率合理的序列，$w=10$已足够覆盖相邻帧的共视区域。若存在较大视角跳变（如非均匀采样），可适当增大窗口或引入闭环检测。
+
+\subsection{显存优化分析}
+
+在8 GB VRAM约束下，实验采用了以下措施：
+
+\begin{itemize}
+    \item \textbf{max_keypoints=2048}：限制每张图的最大特征点数，控制注意力矩阵的内存占用；
+    \item \textbf{resize\_max=1200}：预处理时将图像最长边缩放到1200，减少特征图分辨率；
+    \item \textbf{mp=True}：开启混合精度推理，将显存占用再降约40\%。
+\end{itemize}
+
+上述措施使得SuperPoint+LightGlue滑动窗口策略的显存峰值控制在4.2 GB，为后续3DGS阶段预留了约4 GB的可用空间。若关闭混合精度（mp=False）且不限制分辨率，显存峰值可达7.8 GB，接近硬件上限，极易触发OOM。
+
+\section{总结}
+
+本次实验验证了基于SuperPoint+LightGlue的深度学习特征匹配与增量式SfM的协同效果。与SIFT基线相比，SuperPoint通过全卷积网络提取全局语义特征，在重复砖墙与弱纹理区域都能获得稳定响应；LightGlue的注意力机制则在全局上下文中区分歧义对应，减少误匹配。滑动窗口序列匹配将匹配对数从$O(N^2)$降至$O(N \cdot w)$，在309张图像规模下将匹配时间从数小时缩短到15分钟，且注册率与点云精度几乎不受影响。
+
+实验也表明，参数选择对结果有直接影响。窗口大小$w=10$在环绕拍摄中已足够覆盖共视区域；max_keypoints=2048与混合精度推理在8GB显存约束下是必要的。若在实际工程中应用，建议在非均匀采样的场景下引入闭环检测，并针对更大规模数据集（数千张图像）探索分层匹配或空间邻近索引，以进一步扩展可处理的数据规模。
+
+\end{document}
