@@ -4,12 +4,40 @@
 
 ## 效果展示
 
-### 千弓楼重建结果（Supersplat 在线预览）
+Bilibili 视频： [LightHouse Reconstruction](https://www.bilibili.com/video/BV189J36eExH)
 
-![Supersplat 预览 1](assets/supersplat_01.png)
-![Supersplat 预览 2](assets/supersplat_02.png)
-![Supersplat 预览 3](assets/supersplat_03.png)
-![Supersplat 预览 4](assets/supersplat_04.png)
+### 灯塔重建截图（Supersplat 在线预览）
+
+<table>
+  <tr>
+    <td><img src="assets/lighthouse/lighthouse_00.png" width="400"/></td>
+    <td><img src="assets/lighthouse/lighthouse_01.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="assets/lighthouse/lighthouse_02.png" width="400"/></td>
+    <td><img src="assets/lighthouse/lighthouse_03.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="assets/lighthouse/lighthouse_04.png" width="400"/></td>
+    <td><img src="assets/lighthouse/lighthouse_05.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="assets/lighthouse/lighthouse_06.png" width="400"/></td>
+    <td><img src="assets/lighthouse/lighthouse_07.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="assets/lighthouse/lighthouse_08.png" width="400"/></td>
+    <td><img src="assets/lighthouse/lighthouse_09.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="assets/lighthouse/lighthouse_10.png" width="400"/></td>
+    <td><img src="assets/lighthouse/lighthouse_11.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="assets/lighthouse/lighthouse_12.png" width="400"/></td>
+    <td><img src="assets/lighthouse/lighthouse_13.png" width="400"/></td>
+  </tr>
+</table>
 
 > 交互式查看：将 `output/<model_folder>/point_cloud/iteration_30000/point_cloud.ply` 拖入 [Supersplat](https://superspl.at/editor) 即可在线浏览。
 
