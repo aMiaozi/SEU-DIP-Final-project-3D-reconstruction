@@ -1,6 +1,6 @@
-# 东南大学千弓楼 3D 重建
+# 东南大学数字图像处理课程项目设计-三维重建
 
-本项目基于 **SuperPoint + LightGlue + COLMAP + 3D Gaussian Splatting** 的完整管线，从视频截取的多视角图像重建东南大学千弓楼（Qiangong Building）的三维模型。
+本项目基于 **SuperPoint + LightGlue + COLMAP + 3D Gaussian Splatting** 的完整管线，从视频截取的多视角图像重建东南大学前工院（Qiangong Building）的三维模型。
 
 ## 效果展示
 
