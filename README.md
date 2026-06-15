@@ -66,9 +66,9 @@ python src/run_LightGlue.py \
 
 ```bash
 colmap image_undistorter \
-    --image_path ../data/images/SEU_QiangongBuilding \
-    --input_path ../models/SEU_QiangongBuilding_328 \
-    --output_path ../models/SEU_QiangongBuilding_328_PINHOLE \
+    --image_path ../data/images/LightHouse  \
+    --input_path ../models/LightHouse_309 \
+    --output_path ../models/LightHouse_309_PINHOLE \
     --output_type COLMAP
 ```
 
@@ -76,7 +76,7 @@ colmap image_undistorter \
 
 ```bash
 python src/train.py \
-    -s ../models/SEU_QiangongBuilding_328_PINHOLE \
+    -s ../models/LightHouse_309_PINHOLE \
     -r 4 \
     --iterations 30000
 ```
