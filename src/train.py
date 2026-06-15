@@ -10,11 +10,17 @@
 #
 
 import os
+import sys
 import torch
+
+# 将 gaussian-splatting 加入 Python 路径，以便导入其内部模块
+gaussian_splatting_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'third_party', 'gaussian-splatting')
+if os.path.isdir(gaussian_splatting_dir):
+    sys.path.insert(0, gaussian_splatting_dir)
+
 from random import randint
 from utils.loss_utils import l1_loss, ssim
 from gaussian_renderer import render, network_gui
-import sys
 from scene import Scene, GaussianModel
 from utils.general_utils import safe_state, get_expon_lr_func
 import uuid

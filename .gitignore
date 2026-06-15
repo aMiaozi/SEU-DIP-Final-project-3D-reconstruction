@@ -7,7 +7,8 @@ dist/
 build/
 
 # 大数据文件（不放入 Git）
-images/
+data/
+models/
 outputs/
 *.h5
 *.bin
@@ -34,3 +35,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# 第三方依赖（通过 git clone 或 pip 安装，不入库）
+third_party/
