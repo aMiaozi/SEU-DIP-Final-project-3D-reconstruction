@@ -39,6 +39,19 @@ Bilibili 视频： [LightHouse Reconstruction](https://www.bilibili.com/video/BV
   </tr>
 </table>
 
+### 稀疏点云模型（COLMAP 增量式 SfM 输出）
+
+<table>
+  <tr>
+    <td><img src="assets/lighthouse/sparse_01.png" width="400"/></td>
+    <td><img src="assets/lighthouse/sparse_02.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="assets/lighthouse/sparse_03.png" width="400"/></td>
+    <td><img src="assets/lighthouse/sparse_04.png" width="400"/></td>
+  </tr>
+</table>
+
 > 交互式查看：将 `output/<model_folder>/point_cloud/iteration_30000/point_cloud.ply` 拖入 [Supersplat](https://superspl.at/editor) 即可在线浏览。
 
 ---
