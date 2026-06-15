@@ -1,0 +1,25 @@
+# 核心依赖（需结合官方仓库安装）
+# 以下为参考版本，具体请以各子模块官方要求为准
+
+torch>=2.2.0
+torchvision>=0.17.0
+numpy>=1.24.0
+pillow>=10.0.0
+scipy>=1.11.0
+matplotlib>=3.7.0
+
+# hloc (SuperPoint + LightGlue + COLMAP 封装)
+# 安装方式：git clone https://github.com/cvg/Hierarchical-Localization
+# cd Hierarchical-Localization && pip install -e .
+
+# pycolmap
+# pip install pycolmap
+
+# 3D Gaussian Splatting
+# 安装方式：git clone https://github.com/graphdeco-inria/gaussian-splatting
+# cd gaussian-splatting && pip install -r requirements.txt
+
+# 可选
+# tensorboard
+# opencv-python
+# tqdm

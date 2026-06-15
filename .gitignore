@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# 大数据文件（不放入 Git）
+images/
+outputs/
+*.h5
+*.bin
+*.ply
+*.pth
+*.ckpt
+
+# 3DGS 模型输出
+output/
+point_cloud/
+render/
+*.ply.gz
+
+# 视频
+*.mp4
+*.avi
+*.mov
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
